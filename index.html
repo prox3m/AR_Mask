@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Zappar Face Mask Carousel</title>
+
+    <link rel="stylesheet" href="style.css" />
+
+    <script src="js/aframe.min.js"></script>
+    <script src="js/zappar-aframe/zappar-aframe.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@latest/dist/aframe-extras.min.js"></script>
+</head>
+<body>
+
+    <a-scene>
+        <a-entity zappar-permissions-ui></a-entity>
+        <a-entity zappar-compatibility-ui></a-entity>
+
+        <a-entity id="zappar-camera-entity"
+                  camera
+                  zappar-camera="user-facing: true"></a-entity>
+
+        <a-entity zappar-face id="my-face-tracker">
+            <a-entity zappar-head-mask="face: #my-face-tracker"></a-entity>
+            <a-entity id="masks-container"></a-entity>
+        </a-entity>
+    </a-scene>
+
+    <button id="btn-prev" class="carousel-btn left-btn">&#10094;</button>
+    <button id="btn-next" class="carousel-btn right-btn">&#10095;</button>
+    <button id="toggle-panel" class="toggle-panel">🎭 Маски</button>
+
+    <div id="status" class="status">🔄 Инициализация...</div>
+
+    <div id="admin-panel" class="admin-panel hidden">
+
+        <!-- === ИЗМЕНЕНО: кнопка закрытия панели === -->
+        <button id="close-panel" class="close-panel" aria-label="Закрыть">×</button>
+
+        <h2>🎭 Управление масками</h2>
+        <div id="masks-list"></div>
+
+        <button class="btn btn-upload"
+                onclick="document.getElementById('file-input').click()">
+            📤 Загрузить свою маску
+        </button>
+        <input type="file" id="file-input" accept=".png,.glb,.gltf"
+               style="display: none;" onchange="handleFileUpload(event)">
+
+        <p class="info">
+            📎 PNG (2D — оборачивает лицо), GLB/GLTF (3D)<br>
+            🔒 Базовые маски нельзя удалить
+        </p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -22,7 +22,7 @@ type: '3d',
 file: 'assets/horns.glb',
 position: { x: 0, y: 0, z: 0 },
 rotation: { x: 0, y: 0, z: 0 },
-scale:    { x: 1, y: 1, z: 1 },
+scale:    { x: 2, y: 2, z: 2 },
 autoPlay: false,
 loop: 'repeat',
 mirrorX: true,
@@ -33,11 +33,11 @@ id: 'mask-bucket',
 name: 'Bucket (3D + анимация)',
 type: '3d-animated',
 file: 'assets/bucket.glb',
-position: { x: 0, y: 0, z: 0 },
+position: { x: 0, y: 0.135, z: 0 },
 rotation: { x: 0, y: 0, z: 0 },
-scale:    { x: 1, y: 1, z: 1 },
+scale:    { x: 2.2, y: 2.2, z: 2.2 },
 autoPlay: true,
-loop: 'repeat',
+loop: 'once',
 mirrorX: true,
 isBase: true
 }
@@ -154,12 +154,36 @@ mesh.traverse((node) => {
 ОБНОВЛЕНИЕ ВИДИМОСТИ МАСОК
 ============================================================ */
 function updateMaskVisibility() {
-const visible = isFaceVisible();
-masksConfig.forEach((mask, index) => {
-    const el = document.getElementById(mask.id);
-    if (!el || !el.object3D) return;
-    el.object3D.visible = visible && (index === currentIndex);
-});
+    const visible = isFaceVisible();
+
+    masksConfig.forEach((mask, index) => {
+        const el = document.getElementById(mask.id);
+        if (!el || !el.object3D) return;
+
+        const shouldShow = visible && (index === currentIndex);
+        el.object3D.visible = shouldShow;
+
+        // === Прикрепление 2D-текстуры, когда меш уже готов ===
+        if (mask.type === '2d' && mask._tex) {
+            const mesh = el.getObject3D('mesh');
+            if (mesh && mesh.material) {
+                if (mesh.material.map !== mask._tex) {
+                    mesh.material.map = mask._tex;
+                    mesh.material.needsUpdate = true;
+                    if (!mask._texLogged) {
+                        mask._texLogged = true;
+                        console.log('[Mask App] ✅ 2D-текстура прикреплена:', mask.name);
+                    }
+                }
+                // Держим корректные настройки на случай, если A-Frame сбросит
+                mesh.material.transparent = true;
+                mesh.material.alphaTest   = 0.01;
+                mesh.material.side        = THREE.FrontSide;
+                mesh.material.color.setRGB(1, 1, 1);
+                mesh.material.needsUpdate = true;
+            }
+        }
+    });
 }
 
 function startVisibilityLoop() {
@@ -424,52 +448,80 @@ baseMasks.forEach((mask) => {
 СОЗДАНИЕ МАСОК
 ============================================================ */
 function createMasksInScene() {
-const container = document.getElementById('masks-container');
-clearContainer(container);
+    const container = document.getElementById('masks-container');
+    clearContainer(container);
 
-masksConfig.forEach((mask, index) => {
-     const entity = document.createElement('a-entity');
-     entity.id = mask.id;
-     container.appendChild(entity);
+    masksConfig.forEach((mask, index) => {
+        const entity = document.createElement('a-entity');
+        entity.id = mask.id;
+        container.appendChild(entity);
 
-     if (mask.type === '2d') {
-         entity.setAttribute('geometry',
-             'primitive: face-mesh; face: #my-face-tracker');
-         entity.setAttribute('material', {
-             src: `url(${mask.file})`,
-             transparent: true,
-             alphaTest: 0.01,
-             shader: 'flat',
-             side: 'front'
-         });
-         entity.setAttribute('position',
-             `${mask.position.x} ${mask.position.y} ${mask.position.z}`);
-         entity.setAttribute('rotation',
-             `${mask.rotation.x} ${mask.rotation.y} ${mask.rotation.z}`);
-         entity.setAttribute('scale',
-             `${mask.scale.x} ${mask.scale.y} ${mask.scale.z}`);
-     } else {
-         entity.setAttribute('gltf-model', `url(${mask.file})`);
-         entity.setAttribute('position',
-             `${mask.position.x} ${mask.position.y} ${mask.position.z}`);
-         entity.setAttribute('rotation',
-             `${mask.rotation.x} ${mask.rotation.y} ${mask.rotation.z}`);
-         
-         const sx = mask.mirrorX ? -mask.scale.x : mask.scale.x;
-         entity.setAttribute('scale',
-             `${sx} ${mask.scale.y} ${mask.scale.z}`);
-         
-         entity.addEventListener('model-loaded', () => {
-             forceMaterials(entity, mask.mirrorX);
-         });
+        if (mask.type === '2d') {
+            entity.setAttribute('geometry',
+                'primitive: face-mesh; face: #my-face-tracker');
 
-         if (mask.type === '3d-animated') {
-             applyAnimationState(entity, mask, index === currentIndex);
-         }
-     }
+            // НЕ задаём src в material — иначе A-Frame молча
+            // проваливается в белый цвет на blob-URL.
+            entity.setAttribute('material', {
+                transparent: true,
+                alphaTest: 0.01,
+                shader: 'flat',
+                side: 'front',
+                color: '#ffffff'
+            });
 
-     entity.setAttribute('visible', index === currentIndex);
- });
+            entity.setAttribute('position',
+                `${mask.position.x} ${mask.position.y} ${mask.position.z}`);
+            entity.setAttribute('rotation',
+                `${mask.rotation.x} ${mask.rotation.y} ${mask.rotation.z}`);
+            entity.setAttribute('scale',
+                `${mask.scale.x} ${mask.scale.y} ${mask.scale.z}`);
+
+            // --- Грузим текстуру ОДИН раз, кэшируем в маске ---
+            if (!mask._tex) {
+                const loader = new THREE.TextureLoader();
+                loader.setCrossOrigin('anonymous');
+                loader.load(
+                    mask.file,
+                    (tex) => {
+                        tex.encoding     = THREE.sRGBEncoding;
+                        tex.anisotropy   = 4;
+                        tex.minFilter    = THREE.LinearMipmapLinearFilter;
+                        tex.magFilter    = THREE.LinearFilter;
+                        tex.generateMipmaps = true;
+                        tex.flipY        = true;
+                        tex.needsUpdate  = true;
+
+                        mask._tex = tex;
+                        console.log('[Mask App] 📦 текстура загружена, ждёт прикрепления:', mask.name);
+                    },
+                    undefined,
+                    (err) => console.error('[Mask App] ❌ Ошибка загрузки текстуры', mask.file, err)
+                );
+            }
+
+        } else {
+            entity.setAttribute('gltf-model', `url(${mask.file})`);
+            entity.setAttribute('position',
+                `${mask.position.x} ${mask.position.y} ${mask.position.z}`);
+            entity.setAttribute('rotation',
+                `${mask.rotation.x} ${mask.rotation.y} ${mask.rotation.z}`);
+
+            const sx = mask.mirrorX ? -mask.scale.x : mask.scale.x;
+            entity.setAttribute('scale',
+                `${sx} ${mask.scale.y} ${mask.scale.z}`);
+
+            entity.addEventListener('model-loaded', () => {
+                forceMaterials(entity, mask.mirrorX);
+            });
+
+            if (mask.type === '3d-animated') {
+                applyAnimationState(entity, mask, index === currentIndex);
+            }
+        }
+
+        entity.setAttribute('visible', index === currentIndex);
+    });
 }
 
 /* ============================================================
